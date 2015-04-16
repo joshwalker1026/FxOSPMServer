@@ -1,0 +1,17 @@
+{
+    "name": "FxOSPMServer",
+    "version": "0.0.1",
+  	"description": "FxOSPMServer",
+    "main": "server.js",
+    "author": "Josh Cheng",
+  	"license": "MIT",
+    "dependencies": {
+        "express": "~4.0.0",
+        "mongoose": "~3.6.13",
+        "body-parser": "~1.0.1",
+        "logger": "~0.0.1",
+        "csrf": "~2.0.6",
+        "jwt-simple": "~0.2.0",
+        "morgan":"1.0.1"
+    }
+}
