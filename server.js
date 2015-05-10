@@ -2,14 +2,20 @@
 // =============================================================================
 
 // call the packages we need
-var express    = require('express');        // call express
-var app        = express();                 // define our app using express
-var bodyParser = require('body-parser');
-var mongoose   = require('mongoose');
-var logger 	   = require('morgan');
-var auth 	   = require('./config/auth');
-var Project    = require('./app/models/project');
-var Task       = require('./app/models/task');
+var express       = require('express');        // call express
+var app           = express();                 // define our app using express
+var bodyParser    = require('body-parser');
+var mongoose      = require('mongoose');
+var logger 	      = require('morgan');
+
+
+var csrf          = require('csurf');
+var request       = require('request');
+var cookieParser  = require('cookie-parser');
+var cookieSession = require('cookie-session');
+var auth 	      = require('./config/auth');
+var Project       = require('./app/models/project');
+var Task          = require('./app/models/task');
 
 
 mongoose.connect('mongodb://fxospm:Fish3m3m@ds061601.mongolab.com:61601/fxospm'); // connect to our database
@@ -19,20 +25,31 @@ app.use(logger('dev'));
 // this will let us get the data from a POST
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use(cookieParser());
+app.use(cookieSession({
+     secret: "meh"
+   }));
+// app.use(csrf); 
 
-
-var port = process.env.PORT || 8080;        // set our port
+var port = process.env.PORT || 8168;        // set our port
 
 // ROUTES FOR OUR API
 // =============================================================================
 var router = express.Router();              // get an instance of the express Router
 
-
+// var policy =  "default-src 'self';" +
+//               "frame-src 'self' https://login.persona.org;" +
+//               "script-src 'self' 'unsafe-inline' https://login.persona.org;" +
+//               "style-src 'self' 'unsafe-inline'";
 
 // middleware to use for all requests
-router.all('/*', function(req, res, next) {
+router.all('/*', restrict, function(req, res, next) {
   // CORS headers
   res.header("Access-Control-Allow-Origin", "*"); // restrict it to the required domain
+  // // Firefox and Internet Explorer
+  // res.header("X-Content-Security-Policy", policy);
+  // // Safari and Chrome
+  // res.header("X-WebKit-CSP", policy);
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
   // Set custom headers for CORS
   res.header('Access-Control-Allow-Headers', 'Content-type,Accept,X-Access-Token,X-Key');
@@ -43,23 +60,52 @@ router.all('/*', function(req, res, next) {
   }
 });
 
-// Auth Middleware - This will check if the token is valid
-// Only the requests that start with /api/* will be checked for the token.
-// Any URL's that do not follow the below pattern should be avoided unless you 
-// are sure that authentication is not needed
-app.all('/api/*', [require('./middlewares/validateRequest')]);
-// REGISTER OUR ROUTES -------------------------------
-// all of our routes will be prefixed with /api
-app.use('/api', router);
+// middleware to restrict access to internal routes like /profile
+function restrict(req, res, next) {
+  if (req.session.email) {
+    next();
+  } else {
+    res.json({ status: 'NotAuthenticated' });
+  }
+}
 
-// test route to make sure everything is working (accessed at GET http://localhost:8080/api)
-router.get('/', function(req, res) {
-    res.json({ message: 'hooray! welcome to our api!' });   
+// on routes that end in /authenticate
+app.post('/authenticate', function(req, res) {
+res.header("Access-Control-Allow-Origin", "*");
+    if (!req.body.assertion) {
+        console.log('miss assertion');
+        res.send(400);
+      }
+     // console.log('host: http://' + req.headers.host);
+
+  request.post({
+    url: 'https://verifier.login.persona.org/verify',
+    json: {
+      assertion: req.body.assertion,
+      audience: 'http://localhost:8080'
+    }
+  }, function(error, r, body) {
+    console.log(body);
+    if(body && body.email) {
+      console.log("Cookies: ", req.cookies)
+      req.session.email = body.email;
+      res.json({ success: true });
+      console.log('success');
+    } else {
+      res.json({ success: false });
+      console.log('fail');
+    }
+  });    
 });
 
-// on routes that end in /login
-// ----------------------------------------------------
-app.use('/login', auth.login);
+// REGISTER OUR ROUTES -------------------------------
+// all of our routes will be prefixed with /api
+app.use('/api/v1', router);
+
+// test route to make sure everything is working (accessed at GET http://localhost:8080/api)
+router.get('/', restrict, function(req, res) {
+    res.json({ message: 'hooray! welcome to our api!' });   
+});
 
 // on routes that end in /projects
 // ----------------------------------------------------
